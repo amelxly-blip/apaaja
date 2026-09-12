@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lua Source Cleaner</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">LOCAL-FIRST LUA TOOL</p>
+      <h1>Lua Source Cleaner</h1>
+      <p class="muted">Decode escape desimal dan rapikan source Lua tanpa menjalankan script.</p>
+    </header>
+    <section class="grid">
+      <label>Input Lua<textarea id="input" spellcheck="false" placeholder="Paste script Lua milikmu di sini..."></textarea></label>
+      <label>Hasil bersih<textarea id="output" spellcheck="false" readonly></textarea></label>
+    </section>
+    <div class="actions">
+      <button id="clean">Bersihkan source</button>
+      <button id="copy" class="secondary">Salin hasil</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <p class="note">Catatan: obfuscation yang menghapus nama/struktur asli tidak dapat dipulihkan 100%. Tool ini hanya memformat token dan menghapus komentar, bukan mengeksekusi Lua.</p>
+  </main>
+  <script>
+    const input = document.querySelector("#input");
+    const output = document.querySelector("#output");
+    const status = document.querySelector("#status");
+    document.querySelector("#clean").onclick = async () => {
+      try {
+        status.textContent = "Memproses...";
+        const response = await fetch("/api/clean", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({code: input.value})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        output.value = data.code;
+        status.textContent = "Selesai";
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    };
+    document.querySelector("#copy").onclick = async () => {
+      await navigator.clipboard.writeText(output.value);
+      status.textContent = "Hasil disalin";
+    };
+  </script>
+</body>
+</html>
