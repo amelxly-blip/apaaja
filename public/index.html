@@ -22,6 +22,7 @@
       <button id="copy" class="secondary">Salin hasil</button>
       <span id="status" class="muted"></span>
     </div>
+    <section id="analysis" class="analysis" hidden></section>
     <p class="note">Catatan: obfuscation yang menghapus nama/struktur asli tidak dapat dipulihkan 100%. Tool ini hanya memformat token dan menghapus komentar, bukan mengeksekusi Lua.</p>
   </main>
   <script>
@@ -39,6 +40,11 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
         output.value = data.code;
+        const findings = data.analysis.findings;
+        const panel = document.querySelector("#analysis");
+        panel.hidden = false;
+        panel.innerHTML = `<strong>Analisis statis: risiko ${data.analysis.risk}</strong><span>${data.analysis.sourceLength} karakter, ${data.analysis.lineCount} baris</span>` +
+          (findings.length ? `<ul>${findings.map(item => `<li>${item.label} (${item.count}): ${item.detail}</li>`).join("")}</ul>` : "<p>Tidak ada indikator umum yang terdeteksi.</p>");
         status.textContent = "Selesai";
       } catch (error) {
         status.textContent = error.message;

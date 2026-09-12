@@ -115,7 +115,43 @@ function cleanLua(source) {
     previous = token;
   }
   flush();
-  return lines.join("\n").replace(/[ \t]+\n/g, "\n").trim() + "\n";
+  return simplifyConstants(lines.join("\n").replace(/[ \t]+\n/g, "\n").trim()) + "\n";
+}
+
+function simplifyConstants(code) {
+  let simplified = code.replace(/(-?)\s*(\d+(?:\.\d+)?)\s*([+-])\s*\(\s*(-?)\s*(\d+(?:\.\d+)?)\s*\)/g, (_, leftSign, leftValue, operator, rightSign, rightValue) => {
+    const left = Number(`${leftSign || ""}${leftValue}`);
+    const right = Number(`${rightSign || ""}${rightValue}`);
+    return String(operator === "+" ? left + right : left - right);
+  });
+  simplified = simplified.replace(/-?\d+(?:\.\d+)?\s*([+-])\s*-?\d+(?:\.\d+)?/g, (expression) => {
+    const match = expression.replace(/\s+/g, "").match(/^(-?\d+(?:\.\d+)?)([+-])(-?\d+(?:\.\d+)?)$/);
+    if (!match) return expression;
+    const left = Number(match[1]);
+    const right = Number(match[3]);
+    return String(match[2] === "+" ? left + right : left - right);
+  });
+  return simplified;
+}
+
+function inspectLua(source) {
+  const findings = [];
+  const add = (label, pattern, detail) => {
+    const matches = source.match(pattern);
+    if (matches?.length) findings.push({ label, count: matches.length, detail });
+  };
+  add("Escape numerik", /\\\d{1,3}/g, "String memakai escape desimal.");
+  add("String encoded", /["'][A-Za-z0-9+/]{8,}={0,2}["']/g, "Terlihat seperti Base64 atau alphabet custom.");
+  add("Decoder string", /\bstring\s*\.\s*(char|sub|byte|gsub)\b/g, "Ada operasi decoding string.");
+  add("String table", /\blocal\s+[A-Za-z_]\w*\s*=\s*\{/g, "Ada tabel lokal yang mungkin menjadi string table.");
+  add("Dynamic execution", /\b(loadstring|load|dofile|require)\s*\(/g, "Ada API pemuatan kode dinamis.");
+  add("VM/dispatcher", /\b(setmetatable|getfenv|newproxy)\b/g, "Ada primitive yang sering dipakai loader atau VM.");
+  return {
+    sourceLength: source.length,
+    lineCount: source.split(/\r?\n/).length,
+    findings,
+    risk: findings.some((finding) => finding.label === "Dynamic execution") ? "high" : findings.length >= 3 ? "medium" : "low"
+  };
 }
 
 function json(res, status, body) {
@@ -130,7 +166,8 @@ const server = createServer(async (req, res) => {
       let body = "";
       for await (const chunk of req) body += chunk;
       const payload = JSON.parse(body);
-      return json(res, 200, { code: cleanLua(payload.code) });
+      const code = cleanLua(payload.code);
+      return json(res, 200, { code, analysis: inspectLua(payload.code) });
     }
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
       const html = await readFile(join(publicDir, "index.html"));
