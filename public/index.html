@@ -19,6 +19,7 @@
     </section>
     <div class="actions">
       <button id="clean">Bersihkan source</button>
+      <button id="extract" class="secondary">Ekstrak layer sandbox</button>
       <button id="copy" class="secondary">Salin hasil</button>
       <span id="status" class="muted"></span>
     </div>
@@ -46,6 +47,22 @@
         panel.innerHTML = `<strong>Analisis statis: risiko ${data.analysis.risk}</strong><span>${data.analysis.sourceLength} karakter, ${data.analysis.lineCount} baris</span>` +
           (findings.length ? `<ul>${findings.map(item => `<li>${item.label} (${item.count}): ${item.detail}</li>`).join("")}</ul>` : "<p>Tidak ada indikator umum yang terdeteksi.</p>");
         status.textContent = "Selesai";
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    };
+    document.querySelector("#extract").onclick = async () => {
+      try {
+        status.textContent = "Menjalankan sandbox terbatas...";
+        const response = await fetch("/api/extract", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({code: input.value})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        output.value = data.code;
+        status.textContent = data.captured ? "Layer hasil decode ditangkap" : "Tidak ada layer yang tertangkap";
       } catch (error) {
         status.textContent = error.message;
       }

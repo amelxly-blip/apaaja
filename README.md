@@ -15,3 +15,5 @@ Buka `http://localhost:3000`.
 Push folder ini ke GitHub, lalu pilih repository tersebut di Railway. Railway akan mendeteksi `Dockerfile` dan mengisi `PORT` secara otomatis.
 
 Tool ini tidak menjalankan Lua dan tidak menjamin pemulihan source asli 100%; nama variabel, struktur, atau informasi yang hilang karena obfuscation tidak selalu bisa direkonstruksi.
+
+Tombol **Ekstrak layer sandbox** menjalankan decoder di Lua terbatas tanpa `io`, `os`, network, atau eksekusi hasil `load`; proses dibatasi 5 detik. Gunakan hanya pada script yang kamu miliki atau berizin.

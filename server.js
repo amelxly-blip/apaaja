@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,6 +155,54 @@ function inspectLua(source) {
   };
 }
 
+function extractRuntime(source) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("lua", ["-"], { stdio: ["pipe", "pipe", "pipe"] });
+    let output = "";
+    let error = "";
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.stderr.on("data", (chunk) => { error += chunk; });
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("Sandbox timeout setelah 5 detik."));
+    }, 5000);
+    child.on("error", (cause) => {
+      clearTimeout(timer);
+      reject(new Error(`Lua runtime tidak tersedia: ${cause.message}`));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0 && !output) return reject(new Error(error || `Lua berhenti dengan kode ${code}.`));
+      resolve(output.slice(0, 1_000_000));
+    });
+    const wrapper = `
+local captured = {}
+local function capture(value)
+  if type(value) == "string" then captured[#captured + 1] = value end
+end
+local safe = {
+  assert = assert, error = error, ipairs = ipairs, next = next, pairs = pairs,
+  pcall = pcall, select = select, tonumber = tonumber, tostring = tostring,
+  type = type, unpack = table.unpack, print = function(...) for i = 1, select("#", ...) do capture(select(i, ...)) end end,
+  math = math, string = string, table = table, utf8 = utf8,
+  load = function(chunk) capture(chunk); return function() end end,
+  loadstring = function(chunk) capture(chunk); return function() end end,
+  require = function() return {} end
+}
+local input = io.read("*a")
+local chunk, compileError = load(input, "input", "t", safe)
+if chunk then
+  local ok, runError = pcall(chunk)
+  if not ok then io.stderr:write(runError) end
+else
+  io.stderr:write(compileError)
+end
+for _, value in ipairs(captured) do io.write(value, "\\n") end
+`;
+    child.stdin.end(wrapper + "\n" + source);
+  });
+}
+
 function json(res, status, body) {
   const data = JSON.stringify(body);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -168,6 +217,13 @@ const server = createServer(async (req, res) => {
       const payload = JSON.parse(body);
       const code = cleanLua(payload.code);
       return json(res, 200, { code, analysis: inspectLua(payload.code) });
+    }
+    if (req.method === "POST" && req.url === "/api/extract") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      const payload = JSON.parse(body);
+      const captured = await extractRuntime(payload.code);
+      return json(res, 200, { code: cleanLua(captured), captured });
     }
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
       const html = await readFile(join(publicDir, "index.html"));
