@@ -1,6 +1,0 @@
-.cache/
-.npm/
-.local/
-temp_audio/
-*.db
-__pycache__/
